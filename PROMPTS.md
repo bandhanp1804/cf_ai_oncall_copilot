@@ -41,3 +41,93 @@ and the EGM persona files. Their prompts are recorded in
 The system prompt and tool descriptions sent to Llama 3.3 live in
 [`src/prompts.py`](src/prompts.py), so the history of the model's instructions
 can be read in git.
+
+## 5. Running locally: URL passed as an argument
+
+> *(Pasted terminal output: `npm run dev http://localhost:8787` failing with
+> `The entry-point file at "http:/localhost:8787" was not found`.)*
+>
+> Why am I getting this error? Should I put it under quotes?
+
+What happened: the `# http://localhost:8787` in the README is a shell comment
+that shows where the server listens. Typed without the `#`, npm appended it to
+`pywrangler dev`, and wrangler read it as the entry-point path. Quoting
+wouldn't help. The fix is to run `npm run dev` with no arguments.
+
+## 6. Remote AI session needs a workers.dev subdomain
+
+> *(Pasted terminal output: `npm run dev` failing with "You need to register a
+> workers.dev subdomain before running the dev command in remote mode".)*
+>
+> How do u do this?
+
+What happened: the Workers AI binding has no local emulation, so `wrangler dev`
+opens a remote session for it, and Cloudflare only allows that once the
+account has a `workers.dev` subdomain. Two options: run `npm run dev:scripted`
+(no AI binding, fixed planner, no login), or register the subdomain in the
+dashboard and rerun `npm run dev`.
+
+## 7. Publish to GitHub
+
+> Push this to git so I can connect
+
+What happened: checked `.gitignore` and searched the files for secrets (none
+found), made the initial commit, and created the public repo
+`bandhanp1804/cf_ai_oncall_copilot` with `gh repo create --push`. Workers Builds
+settings were noted: build command `npm run build`, and a Python-aware deploy
+command if the default `npx wrangler deploy` fails.
+
+## 8. "The model is unavailable right now"
+
+> *(Screenshot: the copilot replying "The model is unavailable right now; no
+> actions were taken.")*
+
+What happened: that text is the copilot's fallback when the model call fails
+(`Copilot._model` in `src/copilot.py`, which also writes a `model_error` audit
+entry). The cause was the same missing subdomain: the remote AI session never
+started, so every `env.AI.run` call threw. A test incident against the scripted
+server got a full answer, which confirmed the rest of the app worked.
+
+## 9. Subdomain registered
+
+> I did register this subdomain:
+>
+> *(Screenshot: Worker URL settings showing the `workers.dev` production and
+> preview URLs, with the production toggle off.)*
+
+What happened: started a second `npm run dev` on port 8790 and sent a test
+chat. It came back in `workers-ai` mode with 5 tool calls and no `model_error`.
+Two follow-ups were flagged. First, with no fault injected, Llama called a
+baseline 0.6% error rate "high" and proposed a rollback (the approval gate
+stopped it). Second, the production URL toggle was off.
+
+## 10. Duplicate user message on Enter
+
+> Enter is doing double prompting so fix this
+>
+> *(Screenshot: the same user message shown twice while "Investigating…" is
+> displayed.)*
+
+What happened: only one request reached the server. The agent saves the user
+message before it calls the model, and it rejects a second chat while busy.
+The UI's mid-turn poll returned that saved message while the optimistic bubble
+was still showing. Fix in `web/app/page.tsx`: the optimistic bubble records the
+newest message id at send time and hides once a newer user message arrives.
+The match is on id, so repeating the same question still works.
+
+## 11. Commit the fix
+
+> Yes
+
+What happened: committed the `web/app/page.tsx` fix and pushed it to
+`origin/main`.
+
+## 12. Update this log
+
+> Also add all the prompt history to PROMPTS.md along with a summarized reply.
+> The instructions are in AGENTS.md
+
+What happened: added entries 5 to 12, in the format of the entries above. The
+only AGENTS.md in the repo (`web/AGENTS.md`) is the Next.js notice and has no
+PROMPTS.md instructions. Terminal logs are summarized rather than pasted, and
+the Cloudflare account ID is left out.
