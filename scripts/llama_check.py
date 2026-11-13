@@ -60,7 +60,9 @@ def run_once(base, fault, message):
     state = call(base, sid, "GET", f"/api/incidents/{inc['id']}")
     proposals = state.get("proposals", [])
     return {
-        "llm_mode": state.get("llm_mode"),
+        # The reply's mode, not the server's: a turn that hit the Workers AI
+        # quota is answered by the scripted planner ("scripted-fallback").
+        "llm_mode": reply["message"]["meta"].get("llm_mode") or state.get("llm_mode"),
         "action": proposals[0]["action"] if proposals else None,
         "model_error": next((a["detail"].get("error", "") for a in state.get("audit", []) if a["kind"] == "model_error"), None),
         "text": reply["message"]["content"],
@@ -85,6 +87,8 @@ def main():
             r = run_once(args.base, fault, args.message)
             if r.get("error") or r["model_error"] is not None:
                 got, ok = "error: " + (r.get("error") or "model_error: " + r["model_error"][:160]), False
+            elif r["llm_mode"] == "scripted-fallback":
+                sys.exit("Workers AI daily quota is used up (the turn fell back to the scripted planner); try after 00:00 UTC")
             elif r["llm_mode"] != "workers-ai":
                 sys.exit(f"server is in {r['llm_mode']!r} mode, not workers-ai; run `npm run dev`, not dev:scripted")
             else:

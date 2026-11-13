@@ -119,6 +119,10 @@ export default function Home() {
   // The agent stores the user message before it runs the model, so a poll mid-turn
   // already returns it; drop the optimistic copy once that happens.
   const showPending = !!pendingUser && !messages.some((m) => m.role === "user" && m.id > pendingUser.after);
+  // "scripted-fallback" on the latest answer means Workers AI hit its daily quota.
+  const lastMode = messages.filter((m) => m.role === "assistant").at(-1)?.meta.llm_mode;
+  const fallback = lastMode === "scripted-fallback";
+  const mode = fallback ? lastMode : state?.llm_mode;
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
@@ -129,9 +133,9 @@ export default function Home() {
             Investigates with read-only tools · fixes run only after you approve · every number is checked against tool output
           </p>
         </div>
-        {state?.llm_mode && (
-          <span className={`rounded-full border px-2.5 py-0.5 font-mono text-[11px] ${state.llm_mode === "scripted" ? "border-amber-500/50 text-amber-300" : "border-zinc-700 text-zinc-400"}`}>
-            {state.llm_mode === "scripted" ? "scripted model (local dev)" : "Llama 3.3 70B · Workers AI"}
+        {mode && (
+          <span className={`rounded-full border px-2.5 py-0.5 font-mono text-[11px] ${mode !== "workers-ai" ? "border-amber-500/50 text-amber-300" : "border-zinc-700 text-zinc-400"}`}>
+            {mode === "scripted" ? "scripted model" : fallback ? "scripted fallback · AI quota used up" : "Llama 3.3 70B · Workers AI"}
           </span>
         )}
       </header>
@@ -172,6 +176,15 @@ export default function Home() {
             )}
             <div ref={bottom} />
           </div>
+          {fallback && (
+            <div className="border-t border-amber-900 bg-amber-950/30 px-4 py-2 text-xs text-amber-200">
+              The Workers AI daily free quota is used up, so this answer came from the scripted planner. Llama is back after
+              00:00 UTC.
+              {state?.fallback_url && (
+                <> Always-on scripted demo: <a href={state.fallback_url} className="underline">{new URL(state.fallback_url).host}</a></>
+              )}
+            </div>
+          )}
           {error && <div className="border-t border-rose-900 bg-rose-950/40 px-4 py-2 text-xs text-rose-300">{error}</div>}
           <div className="border-t border-zinc-800 p-3">
             <div className="mb-2 flex flex-wrap gap-1.5">

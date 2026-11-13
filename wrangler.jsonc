@@ -25,12 +25,18 @@
   "ratelimits": [
     { "name": "CHAT_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }
   ],
-  "vars": { "LLM_MODE": "workers-ai" },
+  "vars": {
+    "LLM_MODE": "workers-ai",
+    // Shown in the UI when the Workers AI daily quota runs out (npm run deploy:scripted).
+    "FALLBACK_URL": "https://cf-ai-oncall-copilot-scripted.risingspy007-fe3.workers.dev"
+  },
   "observability": { "enabled": true },
 
   // `npm run dev:scripted`: local run with no Cloudflare login. Same bindings
   // minus the AI binding (which always opens a remote session), and the fixed
-  // ScriptedModel planner in place of Llama 3.3. Never deployed.
+  // ScriptedModel planner in place of Llama 3.3. `npm run deploy:scripted`
+  // deploys it as the fallback Worker cf-ai-oncall-copilot-scripted, which
+  // keeps working when the Workers AI quota is used up.
   "env": {
     "scripted": {
       "durable_objects": {

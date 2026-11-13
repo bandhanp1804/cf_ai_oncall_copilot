@@ -1,6 +1,6 @@
 # cf_ai_oncall_copilot
 
-**Live demo:** <https://cf-ai-oncall-copilot.risingspy007-fe3.workers.dev> · **Demo video:** [docs/demo.mp4](docs/demo.mp4) (57 s: bad deploy → diagnosis → approve rollback → verified and resolved)
+**Live demo:** <https://cf-ai-oncall-copilot.risingspy007-fe3.workers.dev> (Llama 3.3) · **Fallback:** <https://cf-ai-oncall-copilot-scripted.risingspy007-fe3.workers.dev> (scripted planner, no AI quota) · **Demo video:** [docs/demo.mp4](docs/demo.mp4) (57 s: bad deploy → diagnosis → approve rollback → verified and resolved)
 
 An on-call incident copilot that runs entirely on Cloudflare. You tell it
 "checkout is throwing 500s". It investigates with read-only tools, checks
@@ -134,6 +134,14 @@ To deploy on every push with **Workers Builds** (Git integration), set the
 Worker's build settings to build command `npm run build` and deploy command
 `npm run deploy:ci`. The root `postinstall` installs `web/`'s dependencies, and
 `deploy:ci` installs `pywrangler`, which bundles the Python Workers SDK.
+
+**Workers AI quota fallback.** On the free plan, Workers AI allows 10,000
+neurons a day. When a model call fails with `4006` (daily allocation used up),
+the turn switches to the scripted planner mid-turn. It's recorded as
+`model_fallback` in the audit log, and the UI shows a banner linking the
+fallback Worker. `npm run deploy:scripted` deploys that fallback, the
+`scripted` env, as `cf-ai-oncall-copilot-scripted`. It has no AI binding, so it
+always works.
 
 For UI work with hot reload, run `npm run dev:scripted` in one terminal and
 `npm run dev:web` in another, then open http://localhost:3000.

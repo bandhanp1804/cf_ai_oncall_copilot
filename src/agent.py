@@ -18,6 +18,9 @@ from scripted import ScriptedModel
 MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 PROPOSAL_TTL_SECONDS = 65 * 60
 OPEN_STATUSES = ("creating", "awaiting_approval", "approving", "applying", "verifying")
+# Workers AI error for "daily free allocation used up". The turn then falls
+# back to the scripted planner so the demo keeps working until the quota resets.
+QUOTA_ERROR = "4006"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS incident (id TEXT PRIMARY KEY, sid TEXT, title TEXT, status TEXT, created_at REAL);
@@ -87,12 +90,15 @@ class IncidentAgent(DurableObject):
             row["fingerprint"] = json.loads(row["fingerprint"])
         return row
 
-    def _llm_mode(self):
+    def _var(self, name):
         try:
-            mode = self.env.LLM_MODE
+            value = getattr(self.env, name)
         except Exception:
-            mode = None
-        return mode if isinstance(mode, str) and mode else "workers-ai"
+            return ""
+        return value if isinstance(value, str) else ""
+
+    def _llm_mode(self):
+        return self._var("LLM_MODE") or "workers-ai"
 
     def _owns(self, sid):
         inc = self._incident()
@@ -137,6 +143,7 @@ class IncidentAgent(DurableObject):
             "proposals": proposals,
             "busy": self.busy,
             "llm_mode": self._llm_mode(),
+            "fallback_url": self._var("FALLBACK_URL"),
         })
 
     async def _sweep_expired(self):
@@ -182,8 +189,22 @@ class IncidentAgent(DurableObject):
         prior = len(self.db.rows("SELECT id FROM findings WHERE tool != 'remediation_verify'"))
 
         self._add_message("user", text)
-        mode = self._llm_mode()
-        run_model = ScriptedModel() if mode == "scripted" else self._workers_ai
+        used = {"mode": self._llm_mode()}
+        scripted = ScriptedModel()
+
+        async def run_model(messages, tools):
+            if used["mode"] != "workers-ai":
+                return await scripted(messages, tools)
+            try:
+                return await self._workers_ai(messages, tools)
+            except Exception as exc:
+                if QUOTA_ERROR not in str(exc):
+                    raise
+                # ScriptedModel reads only the messages, so it can take over mid-turn.
+                self._audit("model_fallback", {"error": str(exc)[:300], "to": "scripted"})
+                used["mode"] = "scripted-fallback"
+                return await scripted(messages, tools)
+
         copilot = Copilot(run_model, lambda name, args: self._execute_tool(inc["sid"], name, args), self._audit)
         result = await copilot.run_turn(history, text, evidence, prior)
 
@@ -191,7 +212,7 @@ class IncidentAgent(DurableObject):
             "number_check": result["number_check"],
             "proposal_id": result["proposal_id"],
             "tool_calls": result["tool_calls"],
-            "llm_mode": mode,
+            "llm_mode": used["mode"],
         }
         self._add_message("assistant", result["text"], meta)
         return {"role": "assistant", "content": result["text"], "meta": meta}

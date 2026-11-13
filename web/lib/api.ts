@@ -51,6 +51,7 @@ export type IncidentState = {
   proposals: Proposal[];
   busy: boolean;
   llm_mode: string;
+  fallback_url?: string;
 };
 
 export const TERMINAL = new Set(["rejected", "succeeded", "failed", "stale", "expired"]);

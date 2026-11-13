@@ -282,3 +282,30 @@ for the reset, move to the Workers Paid plan, or demo with
 
 What happened: committed and pushed the `llama_check.py` fixes (User-Agent,
 readable HTTP errors, `model_error` text) and PROMPTS.md entries 23 and 24.
+
+## 25. Quota fallback and a fallback URL
+
+> Also have a fallback url
+
+What happened: two changes. First, an automatic fallback in
+`IncidentAgent._turn`: when a Workers AI call fails with `4006` (daily free
+allocation used up), the turn switches to `ScriptedModel` from that call on,
+records `model_fallback` in the audit log, and tags the reply
+`llm_mode: "scripted-fallback"`. The UI then shows an amber badge and a banner
+with the fallback link (`FALLBACK_URL` var, returned as `fallback_url`).
+Second, a fallback URL: `npm run deploy:scripted` deploys the `scripted` env as
+its own Worker, `cf-ai-oncall-copilot-scripted.risingspy007-fe3.workers.dev`,
+which has no AI binding. Deployed both Workers; the first scripted deploy hit a
+network error and the retry succeeded. With the quota still used up, a bad
+deploy on the main site was answered in `scripted-fallback` mode with the right
+rollback, and the fallback URL answered in `scripted` mode. `check:llama` now
+reads each reply's mode, so a fallback answer is never counted as a Llama pass.
+It exits with a quota message instead. README updated with both URLs.
+
+## 26. Push
+
+> Push the code
+
+What happened: committed and pushed the quota fallback, the fallback Worker
+setup, the `check:llama` mode fix, the README updates, and PROMPTS.md entries
+25 and 26. Both Workers were already deployed with this code.

@@ -9,6 +9,7 @@
     "dev:scripted": "npm run build && PATH=\"$PWD/.venv/bin:$PATH\" pywrangler dev --env scripted",
     "dev:web": "NEXT_PUBLIC_API_BASE=http://localhost:8787 npm --prefix web run dev",
     "deploy": "npm run build && PATH=\"$PWD/.venv/bin:$PATH\" pywrangler deploy",
+    "deploy:scripted": "npm run build && PATH=\"$PWD/.venv/bin:$PATH\" pywrangler deploy --env scripted",
     "deploy:ci": "pip install -q uv workers-py==1.17.9 && pywrangler deploy",
     "test": "python3 -m unittest discover -s tests -t .",
     "check:llama": "python3 scripts/llama_check.py"
