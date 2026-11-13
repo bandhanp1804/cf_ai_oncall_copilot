@@ -159,3 +159,19 @@ and proposed rolling back v2.15.0 → v2.14.1. After approval the Workflow
 verified the error rate at 0.4% and resolved the incident. The 57 s video is
 saved as `docs/demo.mp4` (0.9 MB) and linked, with the live URL, at the top of
 the README. This log is now updated after every prompt.
+
+## 15. Fix the Workers Builds failure
+
+> Commit it to git. Also build is failing on cf.
+>
+> *(Pasted Workers Builds log ending in `sh: 1: next: not found` during
+> `npm run build`.)*
+
+What happened: Workers Builds runs `npm clean-install` only at the repo root,
+so `web/`'s dependencies (including `next`) were never installed. Added a root
+`postinstall` (`npm --prefix web ci`). Plain `wrangler deploy` would fail next,
+because `pywrangler` bundles the Python Workers SDK at deploy time, so added a
+`deploy:ci` script that installs `workers-py` and runs `pywrangler deploy`.
+Checked by replaying the CI steps in a fresh clone: `npm ci`, `npm run build`,
+and `deploy:ci` as a dry run all passed. Documented the Workers Builds settings
+in the README. The earlier demo-video work was already committed and pushed.

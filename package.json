@@ -2,12 +2,14 @@
   "name": "cf-ai-oncall-copilot",
   "private": true,
   "scripts": {
+    "postinstall": "npm --prefix web ci",
     "setup": "npm --prefix web install && python3 -m venv .venv && .venv/bin/pip install -q uv workers-py==1.17.9",
     "build": "npm --prefix web run build",
     "dev": "npm run build && PATH=\"$PWD/.venv/bin:$PATH\" pywrangler dev",
     "dev:scripted": "npm run build && PATH=\"$PWD/.venv/bin:$PATH\" pywrangler dev --env scripted",
     "dev:web": "NEXT_PUBLIC_API_BASE=http://localhost:8787 npm --prefix web run dev",
     "deploy": "npm run build && PATH=\"$PWD/.venv/bin:$PATH\" pywrangler deploy",
+    "deploy:ci": "pip install -q uv workers-py==1.17.9 && pywrangler deploy",
     "test": "python3 -m unittest discover -s tests -t ."
   },
   "devDependencies": {

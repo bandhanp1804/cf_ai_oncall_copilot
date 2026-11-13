@@ -124,6 +124,11 @@ npx wrangler login
 npm run deploy                   # builds web/out, then pywrangler deploy
 ```
 
+To deploy on every push with **Workers Builds** (Git integration), set the
+Worker's build settings to build command `npm run build` and deploy command
+`npm run deploy:ci`. The root `postinstall` installs `web/`'s dependencies, and
+`deploy:ci` installs `pywrangler`, which bundles the Python Workers SDK.
+
 For UI work with hot reload, run `npm run dev:scripted` in one terminal and
 `npm run dev:web` in another, then open http://localhost:3000.
 
