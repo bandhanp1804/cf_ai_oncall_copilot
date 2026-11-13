@@ -431,3 +431,11 @@ not have to be committed.
 What happened: put the `user-attachments` URL on its own line near the top of
 the README, so GitHub shows an inline player. The `docs/demo.mp4` link is kept
 as the file fallback. Committed and pushed.
+
+## 37. Push
+
+> Push the change
+
+What happened: the video embed was already pushed in `3488f67`, and `main`
+matched `origin/main`. The only new change was this log entry, which was
+committed and pushed.
