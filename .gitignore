@@ -11,3 +11,4 @@ web/next-env.d.ts
 .DS_Store
 *.log
 .venv-workers/
+live_check_results.json

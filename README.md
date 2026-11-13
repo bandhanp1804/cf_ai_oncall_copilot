@@ -133,6 +133,13 @@ faults, 3 times each, and checks Llama proposes the matching fix (or none when
 healthy). Add `-- --base <url>` to run it against the deployed Worker, or
 `-- --runs 5 --only none -v` to focus on one case. This makes real Workers AI calls.
 
+For the end-to-end reliability check (design V6), run
+`npm run check:live -- --base <url>`. It runs CUJ 1 (diagnose) and CUJ 4
+(recall a past fix) 10 times each. Each run approves the first fix, so the
+second incident has a memory match. It stops, with no score, on an HTTP error,
+a scripted server or an empty Workers AI quota. 10 runs use about 20 chats of
+the 10,000-neuron daily free quota.
+
 **Local, no Cloudflare account needed.** This uses the `scripted` env: the same
 Durable Objects, Workflow and tool loop, with a fixed planner in place of
 Llama 3.3. That's needed because the Workers AI binding always runs remotely.

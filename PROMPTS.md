@@ -361,3 +361,31 @@ in the design doc.
 What happened: committed and pushed the ASD-STE100 design doc, the README
 Architecture, Guardrails and Pages-decision changes, and PROMPTS.md entries 27
 to 30.
+
+## 31. Fix the user's live_check.py
+
+> *(Pasted output: `python3 scripts/live_check.py --base https://…workers.dev`,
+> with all 10 runs failing CUJ 1 and CUJ 4 on `/api/service/reset -> HTTP 403:
+> error code: 1010`, and a "README row" of `CUJ 1: 0/10, CUJ 4: 0/10`.)*
+>
+> I added another script for live check so look into that
+
+What happened: reviewed the user's `scripts/live_check.py` (CUJ 1 and CUJ 4,
+10 runs each). Four fixes. (1) It sends its own User-Agent, because Cloudflare
+blocks urllib's default with 403 error 1010. (2) Setup and HTTP errors raise
+`Abort` and stop the run with exit code 2, instead of scoring them as model
+failures. Before this, the script printed a false "0/10" README row. (3) It
+stops if an answer is not from Llama (`scripted` mode, or
+`scripted-fallback` when the quota is used up), so it does not use quota on
+runs that cannot pass. (4) `live_check_results.json` is now gitignored. Added
+`npm run check:live` and a README note. Tested on the live Worker: requests now
+get through, and the script stopped with the quota message. A scored run must
+wait for the 00:00 UTC quota reset.
+
+## 32. Push
+
+> Push it
+
+What happened: committed and pushed `scripts/live_check.py` with the fixes,
+`npm run check:live`, the README note, the `.gitignore` entry, and PROMPTS.md
+entries 31 and 32.

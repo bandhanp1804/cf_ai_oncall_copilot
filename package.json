@@ -12,7 +12,8 @@
     "deploy:scripted": "npm run build && PATH=\"$PWD/.venv/bin:$PATH\" pywrangler deploy --env scripted",
     "deploy:ci": "pip install -q uv workers-py==1.17.9 && pywrangler deploy",
     "test": "python3 -m unittest discover -s tests -t .",
-    "check:llama": "python3 scripts/llama_check.py"
+    "check:llama": "python3 scripts/llama_check.py",
+    "check:live": "python3 scripts/live_check.py"
   },
   "devDependencies": {
     "wrangler": "4.161.0"
