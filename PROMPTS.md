@@ -309,3 +309,55 @@ It exits with a quota message instead. README updated with both URLs.
 What happened: committed and pushed the quota fallback, the fallback Worker
 setup, the `check:llama` mode fix, the README updates, and PROMPTS.md entries
 25 and 26. Both Workers were already deployed with this code.
+
+## 27. Design doc and architecture in ASD-STE100
+
+> Also update the design docs and the architecture to use asd-ste100 standard
+
+What happened: rewrote `docs/designs/oncall_copilot.md` and the README
+Architecture and Guardrails sections in ASD-STE100 (Simplified Technical
+English). That means short sentences (25 words or fewer for descriptions, 20
+for instructions), one idea per sentence, active voice, simple tenses, and
+instructions as commands. Code names stay as they are. A script checked
+sentence length, and the 2 sentences over the limit were split. The rewrite
+also brought the content up to date: new goals G7 (no fix for a healthy
+service) and G8 (quota fallback), CUJ 7 and CUJ 8, the evidence gate (§5),
+the three model modes and the quota fallback (§6), and a new Deployment
+section (§11: two Workers, Workers Builds settings). It also updated the
+`wrangler.jsonc`, `package.json`, RPC method, test count and V6 live-check
+results to match the code. The README diagram now shows the fallback
+planner. The goldfish review report was not changed, because it records what
+the reviewers wrote.
+
+## 28. Cloudflare Pages for the static page
+
+> Also see if we can integrate the pages api to get have the single static page
+
+What happened: answered as a question, with no code changed. The UI is
+already one static page: the Worker serves the Next.js export (`web/out`)
+through Workers static assets, on the same origin as `/api/*`. Moving it to
+Pages is possible (`wrangler pages deploy web/out`, `NEXT_PUBLIC_API_BASE`
+set to the Worker URL, and the Pages origin added to the CORS allow-list in
+`src/entry.py`). It would add a second deploy and cross-origin requests, which
+is why the design doc rejected it (Alternative D). The user was asked what
+they want Pages for before building it.
+
+## 29. Record the Pages decision
+
+> Okay so add this decision to the readme on why we rejected pages
+
+What happened: added "Workers static assets instead of Cloudflare Pages" to
+the README Trade-offs section, in ASD-STE100 style. The UI is one static page
+that the Worker serves on the same origin as `/api/*`. Pages would add a
+second deploy (so the UI and API can be on different versions) and
+cross-origin requests that need CORS for `pages.dev`. Cloudflare also
+recommends Workers static assets for new projects. It links to Alternative D
+in the design doc.
+
+## 30. Push
+
+> Yes
+
+What happened: committed and pushed the ASD-STE100 design doc, the README
+Architecture, Guardrails and Pages-decision changes, and PROMPTS.md entries 27
+to 30.

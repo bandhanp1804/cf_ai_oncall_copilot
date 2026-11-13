@@ -25,12 +25,17 @@ Worker.
 
 ## Architecture
 
+The text in this section and in the
+[design doc](docs/designs/oncall_copilot.md) follows ASD-STE100 (Simplified
+Technical English).
+
 ```mermaid
 flowchart LR
   UI["Next.js UI<br/>(static assets)"] -- "/api/* + X-Sandbox-Id" --> W["Default Worker<br/>src/entry.py"]
   W -- RPC --> A["IncidentAgent DO<br/>1 per incident<br/>SQLite: messages, findings,<br/>proposals, audit_log"]
   W -- "RPC (fault buttons)" --> S["CheckoutService DO<br/>1 per sandbox<br/>SQLite: state, deploys,<br/>memory, incident_index"]
   A -- "tool loop" --> AI["Workers AI<br/>Llama 3.3 70B"]
+  A -. "error 4006 (quota)" .-> SM["ScriptedModel<br/>fallback planner"]
   A -- "read-only tools" --> S
   A -- "propose → create()" --> WF["RemediationWorkflow"]
   A -- "Approve → send_event()" --> WF
@@ -43,54 +48,74 @@ RemediationWorkflow:  snapshot → report_awaiting → wait_for_event("approval"
                       → apply (retries 3) → verify (retries 4, exponential) → report
 ```
 
-* **Why a Durable Object per incident:** each incident gets one consistent,
-  single-threaded place for its state and its chat loop, and no external
-  database is needed. A second chat message sent while a turn is running gets
-  HTTP 409. Polling reads still go through, because the turn is waiting on
-  outbound I/O.
-* **Why the fix is a Workflow:** its steps are durable and retried, and
-  `wait_for_event` provides a human-approval pause that survives restarts and
-  times out after an hour. Every side effect is in its own named step, because
-  `run()` replays from the top when the instance resumes.
-* **Why memory lives in `CheckoutService`:** one incident's object cannot query
-  another incident's storage, so the service's history owns "how did we fix
-  this last time".
+* **Why a Durable Object for each incident:** each incident gets one
+  consistent, single-threaded location for its state and its chat loop. No
+  external database is necessary. A second chat message during a turn gets
+  HTTP 409. Poll reads continue to work, because the turn waits for outbound
+  I/O.
+* **Why the fix is a Workflow:** its steps are durable, and they retry.
+  `wait_for_event` gives a pause for the human approval. The pause continues
+  after a restart, and it times out after one hour. Each side effect has its
+  own named step, because `run()` starts again from the top when the
+  instance resumes.
+* **Why memory is in `CheckoutService`:** the object of one incident cannot
+  read the storage of a different incident. Thus, the service history owns
+  "how did we fix this before".
+* **Why there are two Workers:** the main Worker uses Llama 3.3. The fallback
+  Worker uses the `scripted` environment and has no `AI` binding. Thus, it
+  works also when the Workers AI daily quota is empty.
 
 ## Guardrails
 
-These are the core of the project. They mirror the design of a production
-multi-agent incident agent I built at Geotab.
+These guardrails are the core of the project. They follow the design of a
+production multi-agent incident agent that I built at Geotab.
 
-1. **Read-only by default.** Every tool the model can call only reads data.
-   `propose_remediation` only records a proposal and starts a Workflow that
-   waits. The model has no route to `apply_remediation`, `set_fault` or
-   `reset`, and a unit test checks this.
-   `CheckoutService.apply_remediation` refuses unless the owning incident
-   reports the proposal as `approving`, which only an Approve click sets. It
-   is also a **compare-and-set** on the version and fault seen at proposal
-   time, so a fix approved after the service has changed ends `stale`
-   without touching anything.
-2. **No invented numbers.** Before an answer is shown, code extracts every
-   number in it and checks that the number appears in a tool result for this
-   incident. Tool arguments, timestamps, ids and text the model wrote earlier
-   do not count as evidence. If a number fails the check, the model gets one
-   rewrite request. If the rewrite fails too, the unverified numbers are
-   replaced with `[unverified]`, and the raw draft goes to the audit log. The
-   UI shows a "numbers verified" badge on each answer.
-3. **Bad tool calls are handled.** Arguments are validated against the same
-   flat JSON schemas the model is given. The validator converts string
-   integers, rejects booleans, enforces enums and ranges, and drops unknown
-   keys. A bad call returns a clear error to the model. A second bad call to
-   the same tool in one turn stops the tool loop and asks for an answer from
-   the evidence already gathered. The loop also handles: tool calls Llama
-   writes as JSON text (`<|python_tag|>`), more than 4 calls in one step,
-   proposing a fix before any investigation, and Workers AI errors.
-4. **Audit log.** Every tool call, validation error, number check, proposal,
-   approval, rejection and Workflow step is stored in SQLite and shown live in
-   the UI.
-5. **Public URL safety.** Each browser gets a random sandbox id, so visitors
-   do not share faults or memory. Chat is rate-limited to 10 turns per minute
-   per sandbox with the Workers Rate Limiting binding.
+1. **Read-only by default.** Each tool that the model can call only reads
+   data.
+   * `propose_remediation` only records a proposal. It starts a Workflow that
+     waits for approval.
+   * The model cannot call `apply_remediation`, `set_fault` or `reset`. A
+     unit test checks this.
+   * `CheckoutService.apply_remediation` refuses unless the incident reports
+     the proposal as `approving`. Only an Approve click sets this status.
+   * `apply_remediation` is also a **compare-and-set** on the version and the
+     fault from the proposal time. If the service changes before the
+     approval, the proposal ends `stale`. The service does not change.
+2. **No invented numbers.** Before the UI shows an answer, code finds each
+   number in the answer. Each number must be in a tool result of this
+   incident.
+   * Tool arguments, timestamps, ids and old model text are not evidence.
+   * If a number fails the check, the model gets one rewrite request.
+   * If the rewrite also fails, the code replaces the unverified numbers with
+     `[unverified]`. The audit log keeps the raw draft.
+   * The UI shows a "numbers verified" badge on each answer.
+3. **No fix without a symptom.** The code accepts `propose_remediation` only
+   if a tool result shows a symptom. A symptom is a metric at 1.5 times its
+   baseline or more, or ERROR or WARN logs. Without a symptom, the model gets
+   a tool error, and it says that checkout looks healthy. A live test showed
+   that a prompt rule alone does not stop Llama (0/3). With this gate, the
+   result is 5/5.
+4. **Bad tool calls do not stop the turn.** The validator uses the same flat
+   JSON schemas that the model gets.
+   * It converts string integers, refuses booleans, applies enums and
+     ranges, and removes unknown keys.
+   * A bad call returns a clear error to the model.
+   * A second bad call to the same tool in one turn stops the tool loop. The
+     model then answers from the evidence that it has.
+   * The loop also accepts tool calls that Llama writes as JSON text
+     (`<|python_tag|>`). It refuses more than 4 calls in one step, and a
+     proposal before an investigation.
+5. **Model errors and quota.** If Workers AI returns error `4006` (daily
+   quota empty), the scripted planner completes the turn. The audit log gets
+   `model_fallback`, and the UI shows a banner with the fallback URL. For
+   other model errors, the answer is "The model is unavailable right now; no
+   actions were taken."
+6. **Audit log.** SQLite stores each tool call, validation error, number
+   check, proposal, approval, rejection, fallback and Workflow step. The UI
+   shows them live.
+7. **Public URL safety.** Each browser gets a random sandbox id. Thus,
+   visitors do not share faults or memory. The Workers Rate Limiting binding
+   permits a maximum of 10 chat turns each minute for each sandbox.
 
 ## Run it
 
@@ -211,6 +236,17 @@ build to the spec.
 * **Llama 3.3 tool calling** is less reliable than frontier models. Flat
   schemas, the validator, the strict text-call parser and the retry cap are
   the mitigation. The live pass rate goes in the table above.
+* **Workers static assets instead of Cloudflare Pages.** The UI is one static
+  page, the Next.js export in `web/out`. The Worker serves it as static assets,
+  on the same origin as `/api/*`. Pages can also serve it, but it adds two
+  costs:
+  * A second deploy. The UI and the API can then be on different versions.
+  * Cross-origin requests. Each API call then needs CORS headers for the
+    `pages.dev` origin.
+
+  The same-origin Worker needs neither. Cloudflare also recommends Workers
+  static assets for new projects. See Alternative D in the
+  [design doc](docs/designs/oncall_copilot.md).
 * **For production:** real telemetry adapters behind the same tool interfaces,
   auth on the approval endpoint (with the approver recorded), Vectorize
   embeddings for similar-incident search once memory outgrows a table scan,
