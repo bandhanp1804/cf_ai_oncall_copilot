@@ -29,7 +29,8 @@ export default function Home() {
   const [state, setState] = useState<IncidentState | null>(null);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [pendingUser, setPendingUser] = useState<string | null>(null);
+  // Optimistic user bubble; `after` is the last message id seen when it was sent.
+  const [pendingUser, setPendingUser] = useState<{ content: string; after: number } | null>(null);
   const [controlsBusy, setControlsBusy] = useState(false);
   const [error, setError] = useState("");
   const bottom = useRef<HTMLDivElement>(null);
@@ -88,7 +89,7 @@ export default function Home() {
     if (!message || sending) return;
     setError("");
     setSending(true);
-    setPendingUser(message);
+    setPendingUser({ content: message, after: Math.max(0, ...(state?.messages ?? []).map((m) => m.id)) });
     setInput("");
     try {
       const id = selected || (await newIncident());
@@ -115,6 +116,9 @@ export default function Home() {
 
   const proposals = new Map(state?.proposals.map((p) => [p.id, p]) ?? []);
   const messages: Message[] = state?.messages ?? [];
+  // The agent stores the user message before it runs the model, so a poll mid-turn
+  // already returns it; drop the optimistic copy once that happens.
+  const showPending = !!pendingUser && !messages.some((m) => m.role === "user" && m.id > pendingUser.after);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
@@ -155,8 +159,8 @@ export default function Home() {
               <ChatMessage key={m.id} message={m} onDecide={decide}
                 proposal={m.meta.proposal_id ? proposals.get(m.meta.proposal_id) : undefined} />
             ))}
-            {pendingUser && (
-              <ChatMessage message={{ id: -1, role: "user", content: pendingUser, meta: {}, created_at: 0 }} onDecide={decide} />
+            {showPending && (
+              <ChatMessage message={{ id: -1, role: "user", content: pendingUser!.content, meta: {}, created_at: 0 }} onDecide={decide} />
             )}
             {sending && (
               <div className="text-xs text-zinc-400">
