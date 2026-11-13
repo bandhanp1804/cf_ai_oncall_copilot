@@ -389,3 +389,27 @@ wait for the 00:00 UTC quota reset.
 What happened: committed and pushed `scripts/live_check.py` with the fixes,
 `npm run check:live`, the README note, the `.gitignore` entry, and PROMPTS.md
 entries 31 and 32.
+
+## 33. Verification status and the demo video
+
+> Update this: pending: needs wrangler login" row with what you've already
+> measured: check:llama diagnosis, healthy 5/5 and each fault 2/2
+> (2026-11-12), with the 10-run recall check to follow and also Drag the
+> video into the README editor on github.com. GitHub hosts it, and it plays
+> right inside the README.
+
+What happened: replaced the "pending: needs `wrangler login`" row in the
+README Verification status table with three rows. V5 tool-message format:
+works. `check:llama` diagnosis: healthy 5/5, and `bad_deploy`,
+`db_pool_exhaustion` and `latency_spike` 2/2 each. 10-run CUJ 1 and CUJ 4
+(`check:live`, V6): to follow, because the Workers AI daily free quota was
+used up. The video upload has to be done by the user in the github.com
+editor, because GitHub hosts video only for files dropped into its web
+editor while signed in. Steps were given.
+
+## 34. Push
+
+> Push to git
+
+What happened: committed and pushed the Verification status update and
+PROMPTS.md entries 33 and 34.

@@ -209,7 +209,9 @@ For UI work with hot reload, run `npm run dev:scripted` in one terminal and
 | Unit tests (`npm test`) | 39 pass on CPython 3.13 |
 | Next.js static export (`npm run build`) | passes |
 | End-to-end in `wrangler dev`, scripted env: CUJ 1 diagnose, CUJ 2 approve and verify, CUJ 3 reject, CUJ 4 recall, stale compare-and-set, double-click 409, sandbox isolation | all pass (2026-11-12) |
-| Live Llama 3.3: tool-message format, 10-run pass rate for CUJ 1 and CUJ 4 (design V5/V6) | **pending:** needs `wrangler login` |
+| Live Llama 3.3, tool-message format (design V5) | works: Llama calls tools through `tool_calls` and the tool results reach it (2026-11-12) |
+| Live Llama 3.3, diagnosis (`npm run check:llama`): no fault proposes nothing, each fault proposes its matching fix | healthy 5/5; `bad_deploy`, `db_pool_exhaustion` and `latency_spike` 2/2 each (2026-11-12) |
+| Live Llama 3.3, 10-run pass rate for CUJ 1 diagnose and CUJ 4 recall (`npm run check:live`, design V6) | **to follow:** the Workers AI daily free quota was used up on 2026-11-12 |
 
 ## How this was built
 
