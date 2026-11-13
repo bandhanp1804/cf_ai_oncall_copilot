@@ -175,3 +175,11 @@ because `pywrangler` bundles the Python Workers SDK at deploy time, so added a
 Checked by replaying the CI steps in a fresh clone: `npm ci`, `npm run build`,
 and `deploy:ci` as a dry run all passed. Documented the Workers Builds settings
 in the README. The earlier demo-video work was already committed and pushed.
+
+## 16. Push
+
+> Push the latest changes to git
+
+What happened: `main` already matched `origin/main`, with no uncommitted
+changes. The only new change was this log entry, which was committed and
+pushed.
