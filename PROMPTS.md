@@ -183,3 +183,79 @@ in the README. The earlier demo-video work was already committed and pushed.
 What happened: `main` already matched `origin/main`, with no uncommitted
 changes. The only new change was this log entry, which was committed and
 pushed.
+
+## 17. Healthy-service rule in the system prompt
+
+> add a rule to src/prompts.py: "If ratio_to_baseline is near 1 and there are
+> no ERROR logs, say checkout looks healthy and do not propose a fix."
+
+What happened: added the rule, word for word, to the Rules list in `SYSTEM`.
+The 36 unit tests pass. Tested against real Llama 3.3 with `npm run dev` on a
+spare port. With no fault, "Why is checkout failing?" still got a rollback
+proposal 3 times out of 3, the model calling a 0.6% error rate (ratio 1.0)
+"high". With a bad deploy it still correctly proposed rolling back to v2.14.1.
+So the rule on its own does not change the model's behavior. Options offered:
+move the check into the step-2 instructions, or add a code guardrail that
+rejects `propose_remediation` when the evidence shows a healthy service.
+
+## 18. Script for the live Llama check
+
+> Write a script to run a live Lllama check
+
+What happened: added `scripts/llama_check.py` (standard library only) and
+`npm run check:llama`. For each scenario (no fault, `bad_deploy`,
+`db_pool_exhaustion`, `latency_spike`) it opens a fresh sandbox, sets the
+fault, waits for it to take effect, asks "Why is checkout failing?", and checks
+the proposal against the fix the simulator expects (none when healthy). It
+exits if the server is in scripted mode, counts `model_error` entries as
+failures, and exits 1 on any failure. A first run with one run per scenario:
+3/4 passed. All three faults got the right fix, and the healthy case still got
+a rollback proposal (the problem from entry 17). Documented in the README.
+
+## 19. Llama check refused a scripted server
+
+> *(Pasted terminal output: `npm run check:llama` stopping with "server is in
+> 'scripted' mode, not workers-ai; run `npm run dev`, not dev:scripted".)*
+
+What happened: the script's mode guard worked as intended. The server on port
+8787 was still the earlier `npm run dev:scripted` one, which has no AI binding,
+so the check would have tested the fixed planner instead of Llama. Fix: stop
+that server and start `npm run dev`, or point the check at the deployed Worker
+with `--base`.
+
+## 20. Dev server came up on port 8788
+
+> *(Pasted terminal output: `npm run dev` starting with the remote AI binding,
+> ending in "Ready on http://localhost:8788".)*
+
+What happened: the real-AI server started on 8788 because the old scripted
+server was still holding 8787, which is why the check kept seeing scripted
+mode. Fix: run the check with `--base http://localhost:8788`, or stop the old
+server and restart `npm run dev` so it takes 8787.
+
+## 21. Code guardrail for the healthy-service false positive
+
+> Looks like the false positive didn't work
+>
+> *(Pasted `npm run check:llama` output: 9/12. `none` proposed `rollback_deploy`
+> 3/3; all three faults passed 3/3.)*
+
+What happened: added the code guardrail from entry 17.
+`guardrails.shows_problem(sources)` is true only when a tool result shows a
+symptom: a metric with `ratio_to_baseline` ≥ 1.5, or ERROR/WARN log lines.
+`Copilot._run_tool` now rejects `propose_remediation` without that evidence.
+The model gets a tool error telling it to check the other metrics and logs,
+and to say checkout looks healthy if they are normal. The block is recorded in
+the audit log. Added 3 unit tests (39 pass). Live check against real Llama:
+`none` 5/5 with no proposal (each answer "Checkout looks healthy…"), and
+`bad_deploy`, `db_pool_exhaustion` and `latency_spike` 2/2 each with the right
+fix.
+
+## 22. Push
+
+> Push to git
+
+What happened: committed and pushed the healthy-service work: the prompt rule,
+the `shows_problem` guardrail and its tests, `scripts/llama_check.py`, the
+README updates, and PROMPTS.md entries 17 to 22. The deployed Worker was not
+redeployed.

@@ -129,7 +129,7 @@ class Copilot:
                 if i >= MAX_CALLS_PER_STEP:
                     results.append((call, {"error": "too many tool calls in one step; call at most 4 at a time"}))
                     continue
-                result = await self._run_tool(call, schema_failures, findings)
+                result = await self._run_tool(call, schema_failures, findings, sources)
                 if name in READ_ONLY and "error" not in result:
                     findings += 1
                     sources.append(result)
@@ -157,7 +157,7 @@ class Copilot:
         text, check = await self._number_check(messages, draft, sources)
         return self._result(text, check, proposal_id, n_calls)
 
-    async def _run_tool(self, call, schema_failures, findings):
+    async def _run_tool(self, call, schema_failures, findings, sources):
         name = call["name"]
         args = _loads(call["arguments"])
         spec = TOOLS_BY_NAME.get(name)
@@ -173,6 +173,9 @@ class Copilot:
             return {"error": str(exc), "expected": spec["parameters"]}
         if name == "propose_remediation" and findings == 0:
             return {"error": "investigate first: call get_metrics, get_recent_deploys or search_logs before proposing a fix"}
+        if name == "propose_remediation" and not guardrails.shows_problem(sources):
+            self.audit("tool_error", {"tool": name, "args": args, "error": "blocked: no evidence of a problem"})
+            return {"error": guardrails.NO_PROBLEM}
         try:
             result = await self.execute_tool(name, args)
         except Exception as exc:

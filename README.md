@@ -99,8 +99,14 @@ Prerequisites: Node 20+, Python 3.13+.
 ```bash
 git clone https://github.com/bandhanp1804/cf_ai_oncall_copilot && cd cf_ai_oncall_copilot
 npm install && npm run setup     # web deps + .venv with uv and pywrangler
-npm test                         # 36 unit tests, standard-library unittest only
+npm test                         # 39 unit tests, standard-library unittest only
 ```
+
+To check the real model, start `npm run dev` and run `npm run check:llama`. It
+asks "Why is checkout failing?" with no fault and with each of the three
+faults, 3 times each, and checks Llama proposes the matching fix (or none when
+healthy). Add `-- --base <url>` to run it against the deployed Worker, or
+`-- --runs 5 --only none -v` to focus on one case. This makes real Workers AI calls.
 
 **Local, no Cloudflare account needed.** This uses the `scripted` env: the same
 Durable Objects, Workflow and tool loop, with a fixed planner in place of
@@ -160,7 +166,7 @@ For UI work with hot reload, run `npm run dev:scripted` in one terminal and
 
 | Check | Result |
 |---|---|
-| Unit tests (`npm test`) | 36 pass on CPython 3.13 |
+| Unit tests (`npm test`) | 39 pass on CPython 3.13 |
 | Next.js static export (`npm run build`) | passes |
 | End-to-end in `wrangler dev`, scripted env: CUJ 1 diagnose, CUJ 2 approve and verify, CUJ 3 reject, CUJ 4 recall, stale compare-and-set, double-click 409, sandbox isolation | all pass (2026-11-12) |
 | Live Llama 3.3: tool-message format, 10-run pass rate for CUJ 1 and CUJ 4 (design V5/V6) | **pending:** needs `wrangler login` |
@@ -219,4 +225,5 @@ src/scripted.py     Fixed planner for local runs and tests
 src/prompts.py      System and rewrite prompts sent to Llama 3.3
 web/                Next.js UI (static export)
 tests/              unittest suite
+scripts/llama_check.py  Live check of the real model's proposals (npm run check:llama)
 ```

@@ -167,3 +167,34 @@ def check_numbers(text, sources):
         if not number_is_grounded(raw, allowed) and raw not in unverified:
             unverified.append(raw)
     return {"ok": not unverified, "unverified": unverified}
+
+
+# A metric this far above baseline counts as a symptom. Healthy readings sit
+# at 1.0 (sim compares against the same minute with no fault); every fault
+# pushes at least one metric well past 1.5.
+PROBLEM_RATIO = 1.5
+PROBLEM_LEVELS = {"ERROR", "WARN"}
+
+NO_PROBLEM = (
+    "no evidence of a problem: every metric checked is within "
+    f"{PROBLEM_RATIO}x of baseline and no ERROR or WARN logs were found. Check "
+    "the other metrics (p95_latency_ms, db_pool_in_use) and search_logs. If they "
+    "are normal too, tell the engineer checkout looks healthy and do not propose a fix."
+)
+
+
+def shows_problem(sources):
+    """True if any tool result is a symptom: an elevated metric or ERROR/WARN logs.
+
+    Proposals are gated on this in code because the model, asked "why is
+    checkout failing?", will propose a fix for a healthy service.
+    """
+    for s in sources:
+        if not isinstance(s, dict):
+            continue
+        ratio = s.get("ratio_to_baseline")
+        if isinstance(ratio, (int, float)) and not isinstance(ratio, bool) and ratio >= PROBLEM_RATIO:
+            return True
+        if any(isinstance(line, dict) and line.get("level") in PROBLEM_LEVELS for line in s.get("lines") or []):
+            return True
+    return False

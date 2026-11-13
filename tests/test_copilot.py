@@ -131,6 +131,21 @@ class RobustnessTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(svc.proposals, [])
         self.assertEqual(out["proposal_id"], "")
 
+    async def test_propose_blocked_when_service_is_healthy(self):
+        svc, audit = FakeService(), Audit()
+        model = Script(
+            {"response": None, "tool_calls": [call("get_metrics", metric="error_rate_pct")]},
+            {"response": None, "tool_calls": [call("propose_remediation", action="rollback_deploy",
+                                                   target_version="v2.14.0", reason="error rate is high")]},
+            {"response": "Checkout looks healthy."},
+        )
+        out = await Copilot(model, svc.execute_tool, audit).run_turn([], "Why is checkout failing?", [])
+        self.assertEqual(svc.proposals, [])
+        self.assertEqual(out["proposal_id"], "")
+        tool_msgs = [m for m in model.seen[2][0] if m["role"] == "tool"]
+        self.assertIn("no evidence of a problem", tool_msgs[-1]["content"])
+        self.assertIn("blocked: no evidence of a problem", json.dumps(audit.entries))
+
     async def test_too_many_calls_in_one_step(self):
         svc = FakeService()
         many = {"response": None, "tool_calls": [call("get_recent_deploys")] * 6}

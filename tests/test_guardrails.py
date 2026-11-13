@@ -74,3 +74,19 @@ class NumberCheckTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ShowsProblemTest(unittest.TestCase):
+    def test_elevated_metric_or_error_logs(self):
+        self.assertTrue(g.shows_problem([{"metric": "p95_latency_ms", "ratio_to_baseline": 19.6}]))
+        self.assertTrue(g.shows_problem([{"lines": [{"level": "WARN", "msg": "gateway slow"}]}]))
+
+    def test_healthy_evidence(self):
+        healthy = [
+            {"metric": "error_rate_pct", "ratio_to_baseline": 1.0},
+            {"total_matching": 0, "lines": []},
+            {"lines": [{"level": "INFO", "msg": "HTTP 200 POST /checkout"}]},
+            "checkout is throwing 500s",  # user text is not evidence
+        ]
+        self.assertFalse(g.shows_problem(healthy))
+        self.assertFalse(g.shows_problem([]))
