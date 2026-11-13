@@ -131,3 +131,31 @@ What happened: added entries 5 to 12, in the format of the entries above. The
 only AGENTS.md in the repo (`web/AGENTS.md`) is the Next.js notice and has no
 PROMPTS.md instructions. Terminal logs are summarized rather than pasted, and
 the Cloudflare account ID is left out.
+
+## 13. Check the repo
+
+> https://github.com/bandhanp1804/cf_ai_oncall_copilot
+
+What happened: confirmed the repo is public with all three commits on `main`.
+The Workers Builds check on the latest commit had failed. A local
+`pywrangler deploy --dry-run` passed, which pointed to the build settings
+rather than the code. Likely causes: `web/` dependencies not installed, no
+build command, or a deploy command that doesn't run `pywrangler`. Suggested
+settings: build `npm --prefix web ci && npm run build`, deploy
+`pip install workers-py==1.17.9 && pywrangler deploy`.
+
+## 14. Deploy and record a demo video
+
+> Is it possible to create a demo video and deploy it using the live cf domain?
+> Also keep updating PROMPTS.md with the prompts
+
+What happened: with the user's go-ahead, deployed with `npm run deploy` to
+`cf-ai-oncall-copilot.risingspy007-fe3.workers.dev`, which also enabled the
+`workers.dev` URL. Recorded the demo against the live site with a headless
+Playwright script: trigger Bad deploy, ask "Checkout is throwing 500s since
+the last deploy. What's going on?", then approve the proposed rollback. Llama
+3.3 made 4 tool calls, quoted the 24.5% error rate against a 0.6% baseline,
+and proposed rolling back v2.15.0 → v2.14.1. After approval the Workflow
+verified the error rate at 0.4% and resolved the incident. The 57 s video is
+saved as `docs/demo.mp4` (0.9 MB) and linked, with the live URL, at the top of
+the README. This log is now updated after every prompt.
