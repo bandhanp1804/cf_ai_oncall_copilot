@@ -34,13 +34,18 @@ def call(base, sid, method, path, body=None, timeout=180):
         base.rstrip("/") + path,
         method=method,
         data=json.dumps(body).encode() if body is not None else None,
-        headers={"content-type": "application/json", "x-sandbox-id": sid},
+        # Cloudflare rejects urllib's default User-Agent with 403 "error code: 1010".
+        headers={"content-type": "application/json", "x-sandbox-id": sid, "user-agent": "cf-ai-oncall-copilot-llama-check/1"},
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read())
     except urllib.error.HTTPError as exc:
-        return json.loads(exc.read() or b"{}") | {"http_status": exc.code}
+        body = exc.read().decode(errors="replace").strip()
+        try:
+            return json.loads(body) | {"http_status": exc.code}
+        except ValueError:
+            sys.exit(f"{method} {path} -> HTTP {exc.code}: {body[:200]}")
 
 
 def run_once(base, fault, message):
@@ -57,7 +62,7 @@ def run_once(base, fault, message):
     return {
         "llm_mode": state.get("llm_mode"),
         "action": proposals[0]["action"] if proposals else None,
-        "model_error": any(a["kind"] == "model_error" for a in state.get("audit", [])),
+        "model_error": next((a["detail"].get("error", "") for a in state.get("audit", []) if a["kind"] == "model_error"), None),
         "text": reply["message"]["content"],
     }
 
@@ -78,8 +83,8 @@ def main():
         passed = 0
         for i in range(1, args.runs + 1):
             r = run_once(args.base, fault, args.message)
-            if r.get("error") or r["model_error"]:
-                got, ok = "error: " + (r.get("error") or "model_error in audit log"), False
+            if r.get("error") or r["model_error"] is not None:
+                got, ok = "error: " + (r.get("error") or "model_error: " + r["model_error"][:160]), False
             elif r["llm_mode"] != "workers-ai":
                 sys.exit(f"server is in {r['llm_mode']!r} mode, not workers-ai; run `npm run dev`, not dev:scripted")
             else:

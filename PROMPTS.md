@@ -259,3 +259,26 @@ What happened: committed and pushed the healthy-service work: the prompt rule,
 the `shows_problem` guardrail and its tests, `scripts/llama_check.py`, the
 README updates, and PROMPTS.md entries 17 to 22. The deployed Worker was not
 redeployed.
+
+## 23. Llama check against the live Worker
+
+> *(Pasted traceback: `npm run check:llama -- --base https://…workers.dev`
+> crashing with `JSONDecodeError` on `POST /api/incidents`.)*
+
+What happened: Cloudflare answered `403 error code: 1010`, which blocks
+urllib's default `Python-urllib` User-Agent, and the script crashed parsing
+that plain-text body as JSON. The script now sends its own User-Agent, exits
+with the status and body on non-JSON errors, and prints the `model_error` text
+when a run fails. The next live run hit `AiError 4006`: the account had used
+its daily free Workers AI allocation (10,000 neurons), mostly on the live
+checks and demo recording. Until the allocation resets at 00:00 UTC, every chat
+on the live site gets the "model is unavailable" fallback. Options given: wait
+for the reset, move to the Workers Paid plan, or demo with
+`npm run dev:scripted`.
+
+## 24. Push the script fix
+
+> Yes do that
+
+What happened: committed and pushed the `llama_check.py` fixes (User-Agent,
+readable HTTP errors, `model_error` text) and PROMPTS.md entries 23 and 24.
