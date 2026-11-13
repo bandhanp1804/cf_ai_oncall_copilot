@@ -1,6 +1,6 @@
 # cf_ai_oncall_copilot
 
-**Live demo:** https://cf-ai-oncall-copilot.risingspy007-fe3.workers.dev · **Demo video:** [docs/demo.mp4](docs/demo.mp4) (57 s: bad deploy → diagnosis → approve rollback → verified and resolved)
+**Live demo:** <https://cf-ai-oncall-copilot.risingspy007-fe3.workers.dev> · **Demo video:** [docs/demo.mp4](docs/demo.mp4) (57 s: bad deploy → diagnosis → approve rollback → verified and resolved)
 
 An on-call incident copilot that runs entirely on Cloudflare. You tell it
 "checkout is throwing 500s". It investigates with read-only tools, checks
