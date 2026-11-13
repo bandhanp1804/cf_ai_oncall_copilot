@@ -1,0 +1,51 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cf-ai-oncall-copilot",
+  "main": "src/entry.py",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["python_workers", "python_workflows"],
+  "ai": { "binding": "AI" },
+  "assets": {
+    "directory": "./web/out",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "INCIDENT_AGENT", "class_name": "IncidentAgent" },
+      { "name": "CHECKOUT_SERVICE", "class_name": "CheckoutService" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["IncidentAgent", "CheckoutService"] }
+  ],
+  "workflows": [
+    { "name": "remediation", "binding": "REMEDIATION", "class_name": "RemediationWorkflow" }
+  ],
+  "ratelimits": [
+    { "name": "CHAT_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }
+  ],
+  "vars": { "LLM_MODE": "workers-ai" },
+  "observability": { "enabled": true },
+
+  // `npm run dev:scripted`: local run with no Cloudflare login. Same bindings
+  // minus the AI binding (which always opens a remote session), and the fixed
+  // ScriptedModel planner in place of Llama 3.3. Never deployed.
+  "env": {
+    "scripted": {
+      "durable_objects": {
+        "bindings": [
+          { "name": "INCIDENT_AGENT", "class_name": "IncidentAgent" },
+          { "name": "CHECKOUT_SERVICE", "class_name": "CheckoutService" }
+        ]
+      },
+      "workflows": [
+        { "name": "remediation-scripted", "binding": "REMEDIATION", "class_name": "RemediationWorkflow" }
+      ],
+      "ratelimits": [
+        { "name": "CHAT_LIMITER", "namespace_id": "1002", "simple": { "limit": 10, "period": 60 } }
+      ],
+      "vars": { "LLM_MODE": "scripted" }
+    }
+  }
+}

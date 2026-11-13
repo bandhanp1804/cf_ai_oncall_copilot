@@ -1,0 +1,217 @@
+# cf_ai_oncall_copilot
+
+**Live demo:** _not deployed yet: run `npm run deploy` and put the URL here_ · **Demo video:** _add link_
+
+An on-call incident copilot that runs entirely on Cloudflare. You tell it
+"checkout is throwing 500s". It investigates with read-only tools, checks
+whether the team has seen the incident before, and proposes one fix. The fix
+runs only after you click **Approve**, as a durable Workflow that snapshots,
+applies, verifies and reports.
+
+The app includes a simulated checkout API. It emits metrics, logs and deploy
+events, and has three faults you can trigger from the UI. You can run the
+whole demo without any real infrastructure.
+
+| Assignment requirement | Cloudflare piece | What it does here |
+|---|---|---|
+| LLM | **Workers AI**, `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | Reasons over the incident and calls the tools `get_metrics`, `search_logs`, `get_recent_deploys`, `find_similar_incidents` and `propose_remediation` |
+| Workflow / coordination | **Durable Objects** + **Workflows** (Python) | One `IncidentAgent` Durable Object per incident runs the chat and tool loop. `RemediationWorkflow` runs the fix as durable steps, with retries and a `wait_for_event` pause for human approval |
+| User input | **Next.js** chat UI on Workers static assets | Chat, fault buttons, an approve/reject card, and a live audit log |
+| Memory / state | **Durable Object SQLite** | Incident timeline, findings, proposals, audit log, and past resolutions used to find similar incidents |
+
+The backend is written in **Python** (Python Workers, with Python Durable Objects
+and a Python Workflow). The UI is a **Next.js** static export served by the same
+Worker.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  UI["Next.js UI<br/>(static assets)"] -- "/api/* + X-Sandbox-Id" --> W["Default Worker<br/>src/entry.py"]
+  W -- RPC --> A["IncidentAgent DO<br/>1 per incident<br/>SQLite: messages, findings,<br/>proposals, audit_log"]
+  W -- "RPC (fault buttons)" --> S["CheckoutService DO<br/>1 per sandbox<br/>SQLite: state, deploys,<br/>memory, incident_index"]
+  A -- "tool loop" --> AI["Workers AI<br/>Llama 3.3 70B"]
+  A -- "read-only tools" --> S
+  A -- "propose → create()" --> WF["RemediationWorkflow"]
+  A -- "Approve → send_event()" --> WF
+  WF -- "apply_remediation (only caller)" --> S
+  WF -- "workflow_update (each step)" --> A
+```
+
+```text
+RemediationWorkflow:  snapshot → report_awaiting → wait_for_event("approval", 1h)
+                      → apply (retries 3) → verify (retries 4, exponential) → report
+```
+
+* **Why a Durable Object per incident:** each incident gets one consistent,
+  single-threaded place for its state and its chat loop, and no external
+  database is needed. A second chat message sent while a turn is running gets
+  HTTP 409. Polling reads still go through, because the turn is waiting on
+  outbound I/O.
+* **Why the fix is a Workflow:** its steps are durable and retried, and
+  `wait_for_event` provides a human-approval pause that survives restarts and
+  times out after an hour. Every side effect is in its own named step, because
+  `run()` replays from the top when the instance resumes.
+* **Why memory lives in `CheckoutService`:** one incident's object cannot query
+  another incident's storage, so the service's history owns "how did we fix
+  this last time".
+
+## Guardrails
+
+These are the core of the project. They mirror the design of a production
+multi-agent incident agent I built at Geotab.
+
+1. **Read-only by default.** Every tool the model can call only reads data.
+   `propose_remediation` only records a proposal and starts a Workflow that
+   waits. The model has no route to `apply_remediation`, `set_fault` or
+   `reset`, and a unit test checks this.
+   `CheckoutService.apply_remediation` refuses unless the owning incident
+   reports the proposal as `approving`, which only an Approve click sets. It
+   is also a **compare-and-set** on the version and fault seen at proposal
+   time, so a fix approved after the service has changed ends `stale`
+   without touching anything.
+2. **No invented numbers.** Before an answer is shown, code extracts every
+   number in it and checks that the number appears in a tool result for this
+   incident. Tool arguments, timestamps, ids and text the model wrote earlier
+   do not count as evidence. If a number fails the check, the model gets one
+   rewrite request. If the rewrite fails too, the unverified numbers are
+   replaced with `[unverified]`, and the raw draft goes to the audit log. The
+   UI shows a "numbers verified" badge on each answer.
+3. **Bad tool calls are handled.** Arguments are validated against the same
+   flat JSON schemas the model is given. The validator converts string
+   integers, rejects booleans, enforces enums and ranges, and drops unknown
+   keys. A bad call returns a clear error to the model. A second bad call to
+   the same tool in one turn stops the tool loop and asks for an answer from
+   the evidence already gathered. The loop also handles: tool calls Llama
+   writes as JSON text (`<|python_tag|>`), more than 4 calls in one step,
+   proposing a fix before any investigation, and Workers AI errors.
+4. **Audit log.** Every tool call, validation error, number check, proposal,
+   approval, rejection and Workflow step is stored in SQLite and shown live in
+   the UI.
+5. **Public URL safety.** Each browser gets a random sandbox id, so visitors
+   do not share faults or memory. Chat is rate-limited to 10 turns per minute
+   per sandbox with the Workers Rate Limiting binding.
+
+## Run it
+
+Prerequisites: Node 20+, Python 3.13+.
+
+```bash
+git clone https://github.com/bandhanp1804/cf_ai_oncall_copilot && cd cf_ai_oncall_copilot
+npm install && npm run setup     # web deps + .venv with uv and pywrangler
+npm test                         # 36 unit tests, standard-library unittest only
+```
+
+**Local, no Cloudflare account needed.** This uses the `scripted` env: the same
+Durable Objects, Workflow and tool loop, with a fixed planner in place of
+Llama 3.3. That's needed because the Workers AI binding always runs remotely.
+
+```bash
+npm run dev:scripted             # http://localhost:8787
+```
+
+**Local, with Llama 3.3 on Workers AI:**
+
+```bash
+npx wrangler login
+npm run dev                      # http://localhost:8787
+```
+
+**Deploy:**
+
+```bash
+npx wrangler login
+npm run deploy                   # builds web/out, then pywrangler deploy
+```
+
+For UI work with hot reload, run `npm run dev:scripted` in one terminal and
+`npm run dev:web` in another, then open http://localhost:3000.
+
+## Demo walkthrough
+
+1. Click **Trigger a fault → Bad deploy**. The error-rate tile turns red within
+   about 10 s.
+2. Ask **"Why is checkout failing?"**. The audit log fills with
+   `get_metrics`, `get_recent_deploys`, `search_logs` and
+   `find_similar_incidents`. The answer names `v2.15.0`, quotes the error rate
+   from the tool output with a ✓ numbers-verified badge, and shows a proposal
+   card: *Roll back v2.15.0 → v2.14.1*.
+3. Click **Approve**. The card steps through Snapshot → Approval → Apply →
+   Verify → Report. Verify retries while the error rate falls, then the
+   incident becomes `resolved` and is saved to memory.
+4. Trigger **Bad deploy** again and open a new incident. The answer now says
+   *"This matches past incident inc-… ; you fixed it before with
+   rollback_deploy to v2.14.1."*
+5. Try **Reject**, or change the fault after a proposal is made and then
+   approve it. The Workflow ends `rejected` or `stale`, and nothing changes.
+
+| Fault | Symptoms | Expected fix |
+|---|---|---|
+| Bad deploy | Error rate 22–26%, `NullPointerException at PaymentClientV2` | `rollback_deploy` to the previous version |
+| DB pool exhaustion | Error rate 8–12%, p95 about 2.8 s, pool 50/50 | `scale_db_pool` |
+| Latency spike | p95 about 4.1 s, payments-gateway timeouts | `failover_payment_provider` |
+
+## Verification status
+
+| Check | Result |
+|---|---|
+| Unit tests (`npm test`) | 36 pass on CPython 3.13 |
+| Next.js static export (`npm run build`) | passes |
+| End-to-end in `wrangler dev`, scripted env: CUJ 1 diagnose, CUJ 2 approve and verify, CUJ 3 reject, CUJ 4 recall, stale compare-and-set, double-click 409, sandbox isolation | all pass (2026-11-12) |
+| Live Llama 3.3: tool-message format, 10-run pass rate for CUJ 1 and CUJ 4 (design V5/V6) | **pending:** needs `wrangler login` |
+
+## How this was built
+
+This project uses Google's
+[Elephant-Goldfish Model](https://github.com/google/elephant-goldfish-model):
+write the spec with full context (the elephant), review it with fresh-context
+subagents that see only the document (goldfish), resolve the findings, then
+build to the spec.
+
+* [`concepts_brief.md`](concepts_brief.md): the original plan as a concept brief
+* [`docs/designs/oncall_copilot.md`](docs/designs/oncall_copilot.md): the
+  design doc, with goals, CUJs, architecture, the state machines and the
+  implementation plan
+* [`docs/designs/review/goldfish_review_report.md`](docs/designs/review/goldfish_review_report.md):
+  24 findings from two goldfish reviewers (design critic and implementation
+  readiness, the latter checked against the Python Workers SDK source), and
+  how each was resolved
+* [`PROMPTS.md`](PROMPTS.md): the AI prompt history
+
+## Trade-offs and what I'd change for production
+
+* **Python instead of the TypeScript Agents SDK.** The Agents SDK is
+  TypeScript-only. Here the chat persistence and tool loop are written by hand
+  (`copilot.py`, `agent.py`), and the Workflow's `wait_for_event` replaces the
+  SDK's in-chat approval, which gives an approval that survives restarts and
+  expires.
+* **Polling instead of streaming.** The number check needs the whole answer
+  before any of it is shown, so streaming tokens would stream unchecked
+  numbers. The UI polls the audit log every 1.5 s, and only while something is
+  running.
+* **Llama 3.3 tool calling** is less reliable than frontier models. Flat
+  schemas, the validator, the strict text-call parser and the retry cap are
+  the mitigation. The live pass rate goes in the table above.
+* **For production:** real telemetry adapters behind the same tool interfaces,
+  auth on the approval endpoint (with the approver recorded), Vectorize
+  embeddings for similar-incident search once memory outgrows a table scan,
+  and per-metric number matching.
+
+## Layout
+
+```text
+src/entry.py        Worker routes (/api/*), sandbox and rate-limit checks
+src/agent.py        IncidentAgent Durable Object: chat turn, proposals, workflow updates
+src/service.py      CheckoutService Durable Object: simulator state, deploys, memory
+src/remediation.py  RemediationWorkflow (Python Workflow)
+src/copilot.py      Tool loop, tool-call parsing, number check orchestration (pure Python)
+src/guardrails.py   Argument validation, number extraction/check/redaction
+src/tools.py        Tool schemas (shared by the model and the validator)
+src/sim.py          Simulated checkout API (pure function of state and time)
+src/memory.py       Fingerprints and similar-incident scoring
+src/ops.py          Remediation validation, compare-and-set apply
+src/scripted.py     Fixed planner for local runs and tests
+src/prompts.py      System and rewrite prompts sent to Llama 3.3
+web/                Next.js UI (static export)
+tests/              unittest suite
+```
