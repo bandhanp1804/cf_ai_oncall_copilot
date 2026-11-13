@@ -413,3 +413,21 @@ editor while signed in. Steps were given.
 
 What happened: committed and pushed the Verification status update and
 PROMPTS.md entries 33 and 34.
+
+## 35. Video URL
+
+> This is the URL: https://github.com/bandhanp1804/cf_ai_oncall_copilot/blob/main/docs/demo.mp4
+
+What happened: that is the repo file page for `docs/demo.mp4`, which the README
+already links. It is not a `user-attachments` URL, so it does not play inline in
+the README. No new commits were on GitHub. Explained how to get the
+`user-attachments` URL by dragging the file into a GitHub editor, which does
+not have to be committed.
+
+## 36. Embed the demo video
+
+> https://github.com/user-attachments/assets/c943bf9c-5e67-468b-bd4d-65047921f463
+
+What happened: put the `user-attachments` URL on its own line near the top of
+the README, so GitHub shows an inline player. The `docs/demo.mp4` link is kept
+as the file fallback. Committed and pushed.
